@@ -1,10 +1,5 @@
 FROM ubuntu
 
-# update the package list
-RUN apt-get update
-
-#Install wget 
-RUN apt-get install wget
 
 RUN wget https://raw.githubusercontent.com/devopsbc01/Scripts/master/Postgresql-Install-1.sh
 RUN wget https://raw.githubusercontent.com/devopsbc01/Scripts/master/tomcat.sh
