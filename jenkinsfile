@@ -22,6 +22,14 @@ pipeline {
 					//sh "mvn ${SONAR_MAVEN_GOAL} -Dsonar.host.url=${SONAR_HOST_URL}  -Dsonar.projectKey=WEBPOC:AVNCommunication -Dsonar.sources=. -Dsonar.tests=. -Dsonar.inclusions=**/test/java/servlet/createpage_junit.java -Dsonar.test.exclusions=**/test/java/servlet/createpage_junit.java -Dsonar.login=admin -Dsonar.password=sonar"
 				//}
             }
+			post {
+				success {
+					slackSend (color: '#00FF00', message: "Stage : 'static code analysis' SUCCESSFUL: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]' (${env.BUILD_URL})")
+					}
+				failure {
+					slackSend (color: '#FF0000', message: "Stage : 'static code analysis' FAILED: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]' (${env.BUILD_URL})")
+					}
+			}
 		}
 
 		stage ('Build') {
@@ -31,16 +39,28 @@ pipeline {
 			post {
 				always {
 					jiraSendBuildInfo site: 'devopsbc-b3-t3.atlassian.net'
-					//jiraSendBuildInfo branch: 'DEVOPS-1', site: 'devopsbc-b3-t3.atlassian.net'
-					//jiraSendBuildInfo site: 'devopsbc-b3-t3.atlassian.net', issueKeys: ['DEVOPS*]
-       }
-   }
+				}
+				success {
+					slackSend (color: '#00FF00', message: "Stage : 'Build' SUCCESSFUL: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]' (${env.BUILD_URL})")
+				}
+				failure {
+					slackSend (color: '#FF0000', message: "Stage : 'Build' FAILED: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]' (${env.BUILD_URL})")
+				}
+			}
 		}
 		
 		stage ('Package') {
            steps {
                 sh 'mvn package' 
             }
+			post {
+				success {
+					slackSend (color: '#00FF00', message: "Stage : 'Package' SUCCESSFUL: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]' (${env.BUILD_URL})")
+					}
+				failure {
+					slackSend (color: '#FF0000', message: "Stage : 'Package' FAILED: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]' (${env.BUILD_URL})")
+					}
+			}
 		}
 		
 		stage ('Publish to artifactory') {
@@ -55,39 +75,106 @@ pipeline {
 				server.publishBuildInfo buildInfo
 				}
 			}
+			post {
+				success {
+					slackSend (color: '#00FF00', message: "Stage : 'Publish to artifactory' SUCCESSFUL: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]' (${env.BUILD_URL})")
+					}
+				failure {
+					slackSend (color: '#FF0000', message: "Stage : 'Publish to artifactory' FAILED: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]' (${env.BUILD_URL})")
+					}
+			}
 		}
 		
-		stage ('Deploy to QA') {
-           steps {
-			deploy adapters: [tomcat8(credentialsId: '7c688857-573b-45f8-a4ec-fd7975194aa4', path: '', url: 'http://172.31.1.112:8080')], contextPath: '/QAWebapp', onFailure: false, war: '**/*.war'
-			}
+		stage('Docker Build'){
+            steps{
+               sh "docker build . -t biplabchakraborty/avncomm:0.0.1"
+            }
 			post {
-       always {
-           jiraSendDeploymentInfo site: 'devopsbc-b3-t3.atlassian.net', environmentId: 'QA', environmentName: 'Test Environment', environmentType: 'testing'
-       }
-   }
-		}
-
+				success {
+					slackSend (color: '#00FF00', message: "Stage : 'Docker Build' SUCCESSFUL: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]' (${env.BUILD_URL})")
+					}
+				failure {
+					slackSend (color: '#FF0000', message: "Stage : 'Docker Build' FAILED: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]' (${env.BUILD_URL})")
+					}
+			}
+        }
+        
+        stage('Push to Dockerhub'){
+            steps{
+                withCredentials([string(credentialsId: 'docker-hub-biplab', variable: 'dockerHubPwdBiplab')]) {
+                    sh "docker login -u biplabchakraborty -p ${dockerHubPwdBiplab}"
+                } 
+               sh "docker push biplabchakraborty/avncomm:0.0.1"
+            }
+			post {
+				success {
+					slackSend (color: '#00FF00', message: "Stage : 'Push to Dockerhub' SUCCESSFUL: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]' (${env.BUILD_URL})")
+					}
+				failure {
+					slackSend (color: '#FF0000', message: "Stage : 'Push to Dockerhub' FAILED: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]' (${env.BUILD_URL})")
+					}
+			}
+        }
+        
+        stage('Deploy To QA'){
+            steps{
+               ansiblePlaybook credentialsId: 'ubuntu-qa-ssh', disableHostKeyChecking: true, installation: 'ansible', inventory: 'qa.env', playbook: 'deploy-docker.yml'
+            }
+			post {
+				always {
+					jiraSendDeploymentInfo site: 'devopsbc-b3-t3.atlassian.net', environmentId: 'QA', environmentName: 'Test Environment', environmentType: 'testing'
+				}
+				success {
+					slackSend (color: '#00FF00', message: "Stage : 'Deploy To QA' SUCCESSFUL: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]' (${env.BUILD_URL})")
+				}
+				failure {
+					slackSend (color: '#FF0000', message: "Stage : 'Deploy To QA' FAILED: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]' (${env.BUILD_URL})")
+				}
+			}
+        }
+		
 		stage ('Run UI Tests') {
            steps {
                 sh 'mvn -f functionaltest/pom.xml  test' 
 				publishHTML([allowMissing: false, alwaysLinkToLastBuild: false, keepAll: false, reportDir: '\\functionaltest\\target\\surefire-reports', reportFiles: 'index.html', reportName: 'UI Test Report', reportTitles: ''])
             }
+			post {
+				success {
+					slackSend (color: '#00FF00', message: "Stage : 'Run UI Tests' SUCCESSFUL: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]' (${env.BUILD_URL})")
+					}
+				failure {
+					slackSend (color: '#FF0000', message: "Stage : 'Run UI Tests' FAILED: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]' (${env.BUILD_URL})")
+					}
+			}
 		}
 		//stage ('Run Performance Test') {
 		//	steps{
 		//		blazeMeterTest credentialsId: 'BlazeMeter', testId: '9014608.taurus', workspaceId: '756649'
 		//	}
+			//post {
+			//	success {
+			//		slackSend (color: '#00FF00', message: "Stage : 'Run Performance Test' SUCCESSFUL: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]' (${env.BUILD_URL})")
+			//		}
+			//	failure {
+			//		slackSend (color: '#FF0000', message: "Stage : 'Run Performance Test' FAILED: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]' (${env.BUILD_URL})")
+			//		}
+			//}
 		//}
 		stage ('Deploy to Prod') {
            steps {
 			deploy adapters: [tomcat8(credentialsId: '7c688857-573b-45f8-a4ec-fd7975194aa4', path: '', url: 'http://172.31.7.79:8080')], contextPath: '/ProdWebapp', onFailure: false, war: '**/*.war'
 			}
-			      post {
-       always {
-           jiraSendDeploymentInfo site: 'devopsbc-b3-t3.atlassian.net', environmentId: 'PROD', environmentName: 'Production', environmentType: 'production'
-       }
-   }
+			post {
+				always {
+					jiraSendDeploymentInfo site: 'devopsbc-b3-t3.atlassian.net', environmentId: 'PROD', environmentName: 'Production', environmentType: 'production'
+				}
+				success {
+					slackSend (color: '#00FF00', message: "Stage : 'Deploy to Prod' SUCCESSFUL: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]' (${env.BUILD_URL})")
+				}
+				failure {
+					slackSend (color: '#FF0000', message: "Stage : 'Deploy to Prod' FAILED: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]' (${env.BUILD_URL})")
+				}
+			}
 		}
 		
 		stage ('Run Acceptance Tests') {
@@ -95,6 +182,14 @@ pipeline {
                 sh 'mvn -f Acceptancetest/pom.xml  test' 
 				publishHTML([allowMissing: false, alwaysLinkToLastBuild: false, keepAll: false, reportDir: '\\Acceptancetest\\target\\surefire-reports', reportFiles: 'index.html', reportName: 'Sanity Test Report', reportTitles: ''])
             }
+			post {
+				success {
+					slackSend (color: '#00FF00', message: "Stage : 'Run Acceptance Tests' SUCCESSFUL: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]' (${env.BUILD_URL})")
+					}
+				failure {
+					slackSend (color: '#FF0000', message: "Stage : 'Run Acceptance Tests' FAILED: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]' (${env.BUILD_URL})")
+					}
+			}
 		}	
 	}
 	post {
