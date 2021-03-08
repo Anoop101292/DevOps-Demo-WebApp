@@ -1,0 +1,19 @@
+---
+- hosts: prod
+  become: True
+  tasks:
+    - name: Install python pip
+      apt:
+        name: python-pip
+        state: present
+    - name: Install docker-py python module
+      pip:
+        name: docker-py
+        state: present
+    - name: Start the container
+      docker_container:
+        name: avnapp
+        image: "biplabchakraborty/avncomm:0.0.1"
+        state: started
+        published_ports:
+          - 0.0.0.0:9080:8080
