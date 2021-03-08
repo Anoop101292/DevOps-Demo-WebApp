@@ -11,5 +11,5 @@ RUN cp -Rv /tmp/apache-tomcat-8.5.63/* /usr/local/tomcat/
 
 COPY target/*.war /usr/local/tomcat/webapps/avncomm.war
 
-#EXPOSE 8080
-#CMD /usr/local/tomcat/bin/catalina.sh run
+EXPOSE 8080
+CMD /usr/local/tomcat/bin/catalina.sh run
