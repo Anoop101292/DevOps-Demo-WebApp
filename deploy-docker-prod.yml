@@ -2,7 +2,7 @@
 - hosts: prod
   become: True
   tasks:
-     - name: Start the container
+    - name: Start the container
       docker_container:
         name: avnapp
         image: "biplabchakraborty/avncomm:0.0.1"
