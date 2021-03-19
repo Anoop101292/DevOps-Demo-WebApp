@@ -10,3 +10,4 @@ My Jira integration test2.
 My Slack integration test.
 My Slack integration test2.
 My Jira and jenkins integration test for sending deployment info.
+Pipeline test for DEVOPS-9 jira.
