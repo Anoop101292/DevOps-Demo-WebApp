@@ -149,7 +149,7 @@ pipeline {
 		}
 		stage ('Run Performance Test') {
 			steps{
-				blazeMeterTest credentialsId: 'BlazeMeter', testId: '9014608.taurus', workspaceId: '756649'
+				blazeMeterTest credentialsId: 'devopsbcdemo', testId: '9025559.taurus', workspaceId: '759083'
 			}
 			post {
 				success {
